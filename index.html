@@ -2,143 +2,124 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Revo Learning Flip</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/3/turn.min.js"></script>
+    
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
-            overflow-x: hidden;
         }
 
-        .book-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 2rem auto;
+        .flipbook-viewport {
+            overflow: hidden;
             width: 100%;
-            min-height: 500px;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            touch-action: none; /* PENTING: Mencegah layar scroll saat membalik halaman di HP */
         }
 
-        #flipbook {
-            display: none; 
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        .flipbook {
+            transition: all 0.5s ease;
         }
 
-        #flipbook .page {
+        .flipbook .page {
             background-color: white;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.02);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
             overflow: hidden;
         }
 
-        .book-placeholder {
-            transform: perspective(1200px) rotateY(-15deg);
-            transform-style: preserve-3d;
-            box-shadow: 20px 20px 40px rgba(0,0,0,0.1);
-            border-radius: 4px 16px 16px 4px;
-            border-left: 8px solid #c4d70d;
-            transition: transform 0.5s ease;
-        }
-        
-        .book-placeholder:hover {
-            transform: perspective(1200px) rotateY(-5deg);
+        /* Rendering native canvas agar jauh lebih ringan dan anti-freeze */
+        .flipbook .page canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: fill; /* Strict paper ratio, mengisi penuh kotak */
+            display: block;
+            margin: 0;
+            padding: 0;
+            pointer-events: none; /* PENTING: Agar kursor menembus gambar dan mengenai sensor Turn.js */
+            user-select: none;
         }
 
-        .nav-btn {
-            transition: all 0.2s;
+        #orientationOverlay {
+            backdrop-filter: blur(8px);
+            z-index: 9999;
         }
-        .nav-btn:hover:not(:disabled) {
-            background-color: #f9fbe6;
-            color: #9cb000;
+
+        .loader {
+            border-top-color: #c4d70d;
+            animation: spinner 1.5s linear infinite;
         }
-        .nav-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
+
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
-<body class="text-slate-800 flex flex-col min-h-screen">
+<body class="min-h-screen flex flex-col relative">
 
-    <!-- Navigasi Super Bersih -->
-    <nav class="fixed w-full bg-white/90 backdrop-blur-md z-50 border-b border-slate-200">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center h-20">
-                <div class="flex items-center gap-2 cursor-pointer">
-                    <i class="ph-fill ph-book-open text-4xl text-[#c4d70d]"></i>
-                    <span class="font-bold text-2xl tracking-tight text-slate-900">Revo Learning Flip</span>
+    <nav class="w-full bg-white/80 backdrop-blur-md shadow-sm fixed top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-center sm:justify-start">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-[#c4d70d]/20 flex items-center justify-center text-[#9cb000]">
+                    <i class="fas fa-book-open text-xl"></i>
                 </div>
+                <span class="font-bold text-xl text-slate-800 tracking-tight hidden sm:block">Revo Learning Flip</span>
             </div>
         </div>
     </nav>
 
-    <!-- Konten Utama -->
-    <main class="flex-grow pt-32 pb-16 lg:pt-40 lg:pb-24 overflow-hidden flex items-center">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+    <main class="flex-grow pt-24 pb-16 lg:pt-32 lg:pb-24 overflow-hidden flex items-center w-full">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full h-full flex flex-col justify-center relative">
+            
+            <div id="mainLayoutGrid" class="grid grid-cols-1 items-center w-full">
                 
-                <!-- Kolom Kiri: Input & Upload -->
-                <div class="text-center lg:text-left z-10 flex flex-col justify-center">
-                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-8 text-slate-900">
-                        Ubah PDF menjadi <span class="text-transparent bg-clip-text bg-gradient-to-r from-[#c4d70d] to-[#9cb000]">Flipbook 3D</span>
+                <div id="uploadSection" class="text-center z-10 flex flex-col justify-center w-full max-w-2xl mx-auto">
+                    <h1 class="text-5xl sm:text-6xl font-bold leading-tight mb-12 text-slate-900">
+                        <span class="text-transparent bg-clip-text bg-gradient-to-r from-[#c4d70d] to-[#9cb000]">Welcome Revo Learning Flip</span>
                     </h1>
                     
-                    <div class="flex flex-col gap-4 max-w-md mx-auto lg:mx-0 w-full">
-                        <!-- Input File Asli -->
-                        <input type="file" id="pdfInput" accept="application/pdf" class="hidden">
-                        
-                        <!-- Tombol Upload -->
-                        <button id="uploadBtn" class="w-full bg-[#c4d70d] hover:bg-[#b3c40a] text-slate-900 px-8 py-4 rounded-xl font-bold text-lg transition flex items-center justify-center gap-2 shadow-xl shadow-[#c4d70d]/30">
-                            <i class="ph-bold ph-upload-simple text-xl"></i> Upload File PDF
-                        </button>
-                        
-                        <div class="flex items-center gap-4 my-2">
-                            <div class="h-px bg-slate-200 flex-1"></div>
-                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">ATAU</span>
-                            <div class="h-px bg-slate-200 flex-1"></div>
-                        </div>
-
-                        <!-- Input URL PDF -->
-                        <div class="relative w-full">
-                            <input type="text" id="pdfUrlInput" placeholder="Paste link PDF di sini..." class="w-full px-5 py-3 pr-12 rounded-xl border-2 border-slate-200 focus:border-[#c4d70d] focus:ring-0 outline-none transition bg-white/50 backdrop-blur-sm">
-                            <button id="loadUrlBtn" class="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-[#c4d70d]/20 hover:bg-[#c4d70d]/40 text-[#9cb000] rounded-lg flex items-center justify-center transition">
-                                <i class="ph-bold ph-arrow-right text-lg"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <p id="statusText" class="mt-6 text-sm font-medium text-[#9cb000] hidden">Loading...</p>
+                    <label for="pdfUpload" class="cursor-pointer inline-flex items-center justify-center gap-3 px-8 py-5 bg-[#c4d70d] hover:bg-[#b0c20b] text-slate-900 rounded-2xl font-bold text-lg transition-all shadow-[0_8px_30px_rgb(196,215,13,0.3)] hover:shadow-[0_8px_30px_rgb(196,215,13,0.5)] hover:-translate-y-1 mx-auto w-fit">
+                        <i class="fas fa-upload text-xl"></i>
+                        Upload File PDF
+                        <input type="file" id="pdfUpload" accept="application/pdf" class="hidden" />
+                    </label>
                 </div>
 
-                <!-- Kolom Kanan: Penampil Buku -->
-                <div class="relative w-full flex flex-col items-center">
-                    <div class="absolute -inset-4 bg-gradient-to-r from-[#c4d70d]/30 to-slate-200/50 rounded-[3rem] blur-3xl opacity-50 z-0"></div>
+                <!-- Awalnya disembunyikan agar tidak memakan tempat -->
+                <div id="viewerSection" class="relative w-full h-0 hidden flex-col items-center justify-center bg-slate-900/5 rounded-3xl overflow-hidden shadow-inner">
                     
-                    <!-- Tombol Share (Muncul saat buku terbuka) -->
-                    <button id="shareBtn" class="hidden absolute -top-8 right-0 z-20 bg-white shadow-lg border border-slate-100 text-slate-700 px-4 py-2 rounded-full font-medium flex items-center gap-2 hover:text-[#9cb000] transition">
-                        <i class="ph-bold ph-share-network"></i> Bagikan Link
-                    </button>
-
-                    <div class="book-container z-10 relative">
-                        <div id="demoPlaceholder" class="book-placeholder w-64 h-80 sm:w-80 sm:h-[450px] bg-white flex flex-col items-center justify-center p-8 text-center cursor-pointer">
-                            <i class="ph-fill ph-file-pdf text-6xl text-[#c4d70d] mb-4"></i>
-                            <h3 class="text-2xl font-bold text-slate-800 mb-2">3D Preview</h3>
-                            <p class="text-slate-500">Upload PDF untuk melihat hasilnya di sini.</p>
-                        </div>
-                        <div id="flipbook"></div>
+                    <div id="statusText" class="absolute inset-0 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm z-20 hidden">
+                        <div class="w-16 h-16 border-4 border-slate-200 border-t-[#c4d70d] rounded-full loader mb-4"></div>
+                        <p id="loadingMessage" class="text-slate-600 font-medium animate-pulse text-lg">Memproses buku...</p>
                     </div>
 
-                    <div class="flex items-center gap-6 mt-6 z-10 bg-white px-6 py-3 rounded-full shadow-lg border border-slate-100">
-                        <button id="prevBtn" disabled class="nav-btn w-10 h-10 rounded-full border border-slate-200 flex items-center justify-center text-slate-600">
-                            <i class="ph-bold ph-caret-left text-lg"></i>
+                    <div class="flipbook-viewport w-full h-full relative p-4">
+                        <div id="flipbook" class="flipbook shadow-2xl">
+                            <!-- Halaman akan muncul di sini -->
+                        </div>
+                    </div>
+
+                    <div id="controls" class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-white/95 backdrop-blur-md px-6 py-3 rounded-full shadow-lg border border-slate-200 opacity-0 pointer-events-none transition-opacity duration-300 z-30">
+                        <button id="prevBtn" class="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-chevron-left pointer-events-none"></i>
                         </button>
-                        <span class="text-sm font-medium text-slate-500 min-w-[100px] text-center" id="pageIndicator">Menunggu PDF</span>
-                        <button id="nextBtn" disabled class="nav-btn w-10 h-10 rounded-full border border-slate-200 flex items-center justify-center text-slate-600">
-                            <i class="ph-bold ph-caret-right text-lg"></i>
+                        <div class="font-semibold text-slate-700 min-w-[80px] text-center">
+                            <span id="pageInfo">0 / 0</span>
+                        </div>
+                        <button id="nextBtn" class="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-chevron-right pointer-events-none"></i>
                         </button>
                     </div>
                 </div>
@@ -146,377 +127,276 @@
         </div>
     </main>
 
-    <footer class="bg-slate-900 text-slate-400 py-8 text-center mt-auto">
-        <div class="flex items-center justify-center gap-2 mb-2">
-            <i class="ph-fill ph-book-open text-xl text-[#c4d70d]"></i>
-            <span class="font-bold text-lg tracking-tight text-white">Revo Learning Flip</span>
+    <div id="orientationOverlay" class="fixed inset-0 bg-slate-900/95 flex flex-col items-center justify-center text-white hidden z-[9999]">
+        <i class="fas fa-mobile-alt text-6xl mb-6 animate-bounce"></i>
+        <h2 class="text-2xl font-bold mb-2 text-center px-4">Putar Layar HP Anda</h2>
+        <p class="text-slate-300 text-center px-8">Untuk pengalaman membaca terbaik,<br>silakan gunakan mode lanskap (miring).</p>
+    </div>
+
+    <footer class="w-full bg-white border-t border-slate-100 py-6 mt-auto relative z-10">
+        <div class="max-w-7xl mx-auto px-4 text-center flex flex-col items-center justify-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-[#c4d70d]/20 flex items-center justify-center text-[#9cb000]">
+                <i class="fas fa-book-open text-sm"></i>
+            </div>
+            <p class="text-slate-500 text-sm">© 2024 Revo Learning Flip. All rights reserved.</p>
         </div>
-        <p class="text-sm">© 2026. All rights reserved.</p>
     </footer>
 
-    <!-- Scripts Inti -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/3/turn.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    
-    <!-- Script Module (Cloud Storage & Logika Utama) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Konfigurasi Inisialisasi Cloud
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'revo-flip';
-        let firebaseConfig = null;
-        try {
-             firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        } catch(e) {}
-        
-        let app, db, auth, userId;
-        if (firebaseConfig) {
-             app = initializeApp(firebaseConfig);
-             db = getFirestore(app);
-             auth = getAuth(app);
-        }
-
-        // Variabel UI
-        const uploadBtn = document.getElementById('uploadBtn');
-        const pdfInput = document.getElementById('pdfInput');
-        const pdfUrlInput = document.getElementById('pdfUrlInput');
-        const loadUrlBtn = document.getElementById('loadUrlBtn');
-        const shareBtn = document.getElementById('shareBtn');
+    <script>
+        const pdfUpload = document.getElementById('pdfUpload');
+        const flipbookEl = document.getElementById('flipbook');
         const statusText = document.getElementById('statusText');
-        const demoPlaceholder = document.getElementById('demoPlaceholder');
-        let flipbookEl = document.getElementById('flipbook'); 
-        const pageIndicator = document.getElementById('pageIndicator');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const controls = document.getElementById('controls');
+        const pageInfo = document.getElementById('pageInfo');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
+        const orientationOverlay = document.getElementById('orientationOverlay');
         
-        let currentPdfUrl = null;
+        const mainLayoutGrid = document.getElementById('mainLayoutGrid');
+        const uploadSection = document.getElementById('uploadSection');
+        const viewerSection = document.getElementById('viewerSection');
+        
+        let pdfDoc = null;
+        let isBookRendered = false;
 
+        // Pekerja PDF.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-        async function initApp() {
-            // Autentikasi Cloud diam-diam di belakang layar
-            if (auth) {
-                try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                    userId = auth.currentUser.uid;
-                } catch(e) { console.warn("Sistem Cloud Offline."); }
-            }
+        // Event Listeners
+        pdfUpload.addEventListener('change', handleFileUpload);
+        
+        // Memastikan tombol ditekan murni menggunakan Native Javascript
+        prevBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!this.disabled) $(flipbookEl).turn('previous');
+        });
+        
+        nextBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!this.disabled) $(flipbookEl).turn('next');
+        });
 
-            // Pasang Event Listeners UI
-            uploadBtn.addEventListener('click', () => pdfInput.click());
-            demoPlaceholder.addEventListener('click', () => pdfInput.click());
-            pdfInput.addEventListener('change', handleFileUpload);
-            
-            loadUrlBtn.addEventListener('click', () => handleUrlInput(pdfUrlInput.value.trim()));
-            pdfUrlInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') handleUrlInput(pdfUrlInput.value.trim());
-            });
-
-            shareBtn.addEventListener('click', handleShareClick);
-
-            prevBtn.addEventListener('click', () => {
-                if (flipbookEl && $(flipbookEl).length) $(flipbookEl).turn('previous');
-            });
-            nextBtn.addEventListener('click', () => {
-                if (flipbookEl && $(flipbookEl).length) $(flipbookEl).turn('next');
-            });
-
-            // Cek jika ada URL PDF di parameter link saat web dibuka (Fitur Share)
-            const urlParams = new URLSearchParams(window.location.search);
-            const sharedCloudId = urlParams.get('id');
-            const sharedPdfUrl = urlParams.get('pdf');
-
-            if(sharedCloudId) {
-                // Buku dikirim dari Cloud
-                loadPdfFromCloud(sharedCloudId);
-            } else if(sharedPdfUrl) {
-                // Buku dikirim dari link biasa
-                pdfUrlInput.value = sharedPdfUrl;
-                handleUrlInput(sharedPdfUrl);
-            }
-        }
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', handleResize);
 
         async function handleFileUpload(e) {
             const file = e.target.files[0];
-            if (!file || !file.name.toLowerCase().endsWith('.pdf')) return;
-            
-            currentPdfUrl = null; 
-            shareBtn.classList.add('hidden'); 
-            uploadBtn.disabled = true;
+            if (!file) return;
+            if (file.type !== 'application/pdf') {
+                alert('Tolong unggah file berformat PDF.');
+                return;
+            }
 
-            setStatus("Membaca file lokal...");
+            // Tampilkan Viewer
+            uploadSection.classList.add('hidden');
+            viewerSection.classList.remove('hidden', 'h-0');
+            viewerSection.classList.add('h-[85vh]', 'lg:h-[90vh]', 'flex');
+            
+            statusText.classList.remove('hidden');
+            loadingMessage.textContent = 'Membaca file PDF...';
+
+            await new Promise(resolve => setTimeout(resolve, 150));
+
             try {
                 const arrayBuffer = await file.arrayBuffer();
-                
-                // Coba simpan ke Cloud untuk mendapatkan Link Share!
-                if (db && userId) {
-                    try {
-                        const bookId = await uploadPdfToCloud(file, arrayBuffer);
-                        const currentBaseUrl = window.location.href.split('?')[0].split('#')[0];
-                        currentPdfUrl = currentBaseUrl + "?id=" + bookId;
-                        shareBtn.classList.remove('hidden'); 
-                    } catch(cloudErr) {
-                        console.warn("Gagal simpan ke Cloud, tetap lanjut baca lokal.", cloudErr);
-                    }
-                }
-
-                setStatus("Mempersiapkan buku...");
-                await processPdfData(arrayBuffer);
+                const pdfData = new Uint8Array(arrayBuffer);
+                await processPdfData(pdfData);
             } catch (error) {
-                showError(error);
-            } finally {
-                pdfInput.value = ''; 
-                uploadBtn.disabled = false;
+                console.error("Error reading file:", error);
+                loadingMessage.textContent = 'Gagal membaca file.';
+                setTimeout(() => {
+                    statusText.classList.add('hidden');
+                    uploadSection.classList.remove('hidden');
+                    viewerSection.classList.add('hidden', 'h-0');
+                    viewerSection.classList.remove('h-[85vh]', 'lg:h-[90vh]', 'flex');
+                }, 2000);
             }
         }
 
-        function handleUrlInput(url) {
-            if(!url) return;
-            setStatus("Mengunduh PDF dari link...");
-            const loadingTask = pdfjsLib.getDocument(url);
-            loadingTask.promise.then(pdf => {
-                const currentBaseUrl = window.location.href.split('?')[0].split('#')[0];
-                currentPdfUrl = currentBaseUrl + "?pdf=" + encodeURIComponent(url);
-                shareBtn.classList.remove('hidden'); 
-                renderPdfToFlipbook(pdf);
-            }).catch(error => {
-                showError({ message: "Gagal memuat. Pastikan link adalah PDF publik." });
-            });
-        }
-
-        // Fungsi pembantu mengubah ArrayBuffer ke String (untuk disimpan di database)
-        function arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            return window.btoa(binary);
-        }
-
-        function base64ToArrayBuffer(base64) {
-            let binary_string = window.atob(base64);
-            let len = binary_string.length;
-            let bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binary_string.charCodeAt(i);
-            }
-            return bytes.buffer;
-        }
-
-        async function uploadPdfToCloud(file, arrayBuffer) {
-            const bookId = crypto.randomUUID();
-            const base64 = arrayBufferToBase64(arrayBuffer);
-            // Firebase dokumen maksimal 1MB, jadi kita potong file PDF-nya jadi beberapa bagian
-            const chunkSize = 800000; 
-            const numChunks = Math.ceil(base64.length / chunkSize);
-            
-            setStatus(`Menyiapkan Cloud Storage...`);
-            
-            // Simpan Data Utama Buku
-            const metaRef = doc(db, 'artifacts', appId, 'public', 'data', 'flipbooks', bookId);
-            await setDoc(metaRef, {
-                name: file.name,
-                numChunks: numChunks,
-                createdAt: Date.now()
-            });
-            
-            // Simpan Potongan Filenya
-            for (let i = 0; i < numChunks; i++) {
-                setStatus(`Mengunggah ke Cloud (${i+1}/${numChunks})...`);
-                const chunkData = base64.substring(i * chunkSize, (i + 1) * chunkSize);
-                const chunkRef = doc(db, 'artifacts', appId, 'public', 'data', 'flipbook_chunks', `${bookId}_${i}`);
-                await setDoc(chunkRef, { data: chunkData });
-            }
-            return bookId;
-        }
-
-        async function loadPdfFromCloud(bookId) {
-            if (!db) { showError({message: "Sistem Cloud tidak terhubung."}); return; }
-            demoPlaceholder.style.display = 'none';
-            setStatus("Mencari buku di Cloud...");
+        async function processPdfData(pdfData) {
+            loadingMessage.textContent = 'Merakit struktur buku...';
             
             try {
-                const metaRef = doc(db, 'artifacts', appId, 'public', 'data', 'flipbooks', bookId);
-                const metaSnap = await getDoc(metaRef);
-                
-                if (!metaSnap.exists()) {
-                    throw new Error("Buku tidak ditemukan atau sudah dihapus.");
+                if (isBookRendered) {
+                    $(flipbookEl).turn('destroy');
+                    flipbookEl.innerHTML = '';
+                    isBookRendered = false;
                 }
+
+                pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
                 
-                const numChunks = metaSnap.data().numChunks;
-                let base64 = "";
+                // --- Perhitungan Dimensi Geometri ---
+                const page1 = await pdfDoc.getPage(1);
+                const viewport1 = page1.getViewport({ scale: 1.0 });
+                const pdfRatio = viewport1.width / viewport1.height;
                 
-                for (let i = 0; i < numChunks; i++) {
-                    setStatus(`Mengunduh halaman dari Cloud (${i+1}/${numChunks})...`);
-                    const chunkRef = doc(db, 'artifacts', appId, 'public', 'data', 'flipbook_chunks', `${bookId}_${i}`);
-                    const chunkSnap = await getDoc(chunkRef);
-                    if (chunkSnap.exists()) {
-                        base64 += chunkSnap.data().data;
+                const containerWidth = viewerSection.clientWidth - 40;
+                const containerHeight = viewerSection.clientHeight - 80;
+                
+                let isMobile = window.innerWidth < 768;
+                let bookWidth, bookHeight;
+
+                if (isMobile) {
+                    bookWidth = containerWidth;
+                    bookHeight = bookWidth / pdfRatio;
+                    if (bookHeight > containerHeight) {
+                        bookHeight = containerHeight;
+                        bookWidth = bookHeight * pdfRatio;
                     }
-                }
-                
-                setStatus("Membuka buku...");
-                const arrayBuffer = base64ToArrayBuffer(base64);
-                
-                // Set link untuk dibagikan lagi
-                currentPdfUrl = window.location.origin + window.location.pathname + "?id=" + bookId;
-                shareBtn.classList.remove('hidden');
-                
-                await processPdfData(arrayBuffer);
-                
-            } catch (err) {
-                showError(err);
-            }
-        }
-
-        async function processPdfData(data) {
-            const loadingTask = pdfjsLib.getDocument({ data: data });
-            const pdf = await loadingTask.promise;
-            await renderPdfToFlipbook(pdf);
-        }
-
-        async function renderPdfToFlipbook(pdf) {
-            demoPlaceholder.style.display = 'none';
-
-            // Hancurkan buku lama
-            try { $(flipbookEl).turn('destroy'); } catch(e){}
-            
-            const newFlipbook = document.createElement('div');
-            newFlipbook.id = 'flipbook';
-            newFlipbook.style.display = 'block';
-            newFlipbook.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.25)';
-            flipbookEl.parentNode.replaceChild(newFlipbook, flipbookEl);
-            flipbookEl = newFlipbook;
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-                setStatus(`Menyusun halaman ${i} dari ${pdf.numPages}...`);
-                const pageElement = await createDOMPage(pdf, i);
-                flipbookEl.appendChild(pageElement);
-            }
-
-            setStatus("Mempersiapkan buku 3D...");
-
-            const isMobile = window.innerWidth < 768;
-            const bookWidth = isMobile ? window.innerWidth - 40 : 800; 
-            const bookHeight = isMobile ? (bookWidth * 1.4) : 566; 
-
-            $(flipbookEl).turn({
-                width: bookWidth,
-                height: bookHeight,
-                autoCenter: true,
-                display: isMobile ? 'single' : 'double',
-                acceleration: false, 
-                gradients: true,
-                elevation: 50,
-                when: {
-                    turned: function(event, page, view) {
-                        updateNavigationState(page, pdf.numPages, view);
+                } else {
+                    let singlePageWidth = containerWidth / 2;
+                    bookHeight = singlePageWidth / pdfRatio;
+                    if (bookHeight > containerHeight) {
+                        bookHeight = containerHeight;
+                        singlePageWidth = bookHeight * pdfRatio;
                     }
+                    bookWidth = singlePageWidth * 2;
                 }
-            });
 
-            statusText.classList.add('hidden');
-            updateNavigationState(1, pdf.numPages, isMobile ? [1] : [1, 0]);
+                // Render halaman langsung ke elemen Canvas
+                for (let i = 1; i <= pdfDoc.numPages; i++) {
+                    loadingMessage.textContent = `Memuat halaman ${i} dari ${pdfDoc.numPages}...`;
+                    const pageDiv = await createDOMPage(pdfDoc, i);
+                    flipbookEl.appendChild(pageDiv);
+                    
+                    // Jeda sejenak agar browser tidak memblokir tombol karena Lag
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+
+                loadingMessage.textContent = 'Menyelesaikan...';
+                
+                // Inisialisasi Buku Turn.js
+                $(flipbookEl).turn({
+                    width: Math.round(bookWidth),
+                    height: Math.round(bookHeight),
+                    autoCenter: true,
+                    display: isMobile ? 'single' : 'double',
+                    acceleration: true,
+                    gradients: true,
+                    elevation: 50,
+                    when: {
+                        turned: function(event, page, view) {
+                            updateNavigationState(page, pdfDoc.numPages, view);
+                        }
+                    }
+                });
+
+                isBookRendered = true;
+                statusText.classList.add('hidden');
+                controls.classList.remove('opacity-0', 'pointer-events-none');
+                
+                // Sembunyikan area sisa
+                if (uploadSection && mainLayoutGrid) {
+                    uploadSection.classList.add('hidden');
+                    mainLayoutGrid.classList.remove('lg:grid-cols-2');
+                    mainLayoutGrid.classList.add('justify-center');
+                }
+
+                handleResize(); 
+                
+                // KUNCI PERBAIKAN: Ambil data tampilan halaman langsung dari mesin aslinya
+                const currentView = $(flipbookEl).turn('view');
+                updateNavigationState(1, pdfDoc.numPages, currentView);
+
+            } catch (error) {
+                console.error('Error rendering PDF:', error);
+                loadingMessage.textContent = 'Terjadi kesalahan saat memuat PDF.';
+                setTimeout(() => statusText.classList.add('hidden'), 3000);
+            }
         }
 
         async function createDOMPage(pdf, pageNum) {
             const page = await pdf.getPage(pageNum);
-            const viewport = page.getViewport({ scale: 1.5 });
+            const scale = 2.0; 
+            const viewport = page.getViewport({ scale: scale });
 
             const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
-            await page.render({ canvasContext: context, viewport: viewport }).promise;
-
-            const img = document.createElement('img');
-            img.src = canvas.toDataURL('image/jpeg', 0.95);
-            img.style.width = '100%';
-            img.style.height = '100%';
-            img.style.objectFit = 'contain'; 
-            img.style.pointerEvents = 'none'; 
-            img.style.userSelect = 'none';
-            img.setAttribute('draggable', 'false');
-
-            const element = document.createElement('div');
-            element.className = 'page';
-            element.style.backgroundColor = 'white';
-            element.appendChild(img);
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
             
-            return element;
-        }
-
-        function handleShareClick() {
-            if(!currentPdfUrl) return;
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'page';
+            pageDiv.appendChild(canvas); 
             
-            // Gunakan textarea tersembunyi agar lebih stabil di semua browser
-            const tempInput = document.createElement("textarea");
-            tempInput.value = currentPdfUrl;
-            tempInput.style.position = 'absolute';
-            tempInput.style.left = '-9999px';
-            document.body.appendChild(tempInput);
-            
-            try {
-                tempInput.select();
-                document.execCommand("copy");
-                
-                const originalText = shareBtn.innerHTML;
-                shareBtn.innerHTML = '<i class="ph-bold ph-check"></i> Link Disalin!';
-                shareBtn.classList.replace('text-slate-700', 'text-green-600');
-                
-                setTimeout(() => {
-                    shareBtn.innerHTML = originalText;
-                    shareBtn.classList.replace('text-green-600', 'text-slate-700');
-                }, 3000);
-            } catch (err) {
-                console.error("Gagal menyalin link:", err);
-            } finally {
-                document.body.removeChild(tempInput);
-            }
-        }
-
-        function setStatus(msg) {
-            statusText.classList.remove('hidden', 'text-red-600');
-            statusText.classList.add('text-[#9cb000]');
-            statusText.innerHTML = `<i class="ph-bold ph-spinner animate-spin"></i> ${msg}`;
-        }
-
-        function showError(err) {
-            statusText.classList.remove('hidden', 'text-[#9cb000]');
-            statusText.classList.add('text-red-600');
-            statusText.innerHTML = `<strong>Gagal:</strong> ${err.message}`;
-            uploadBtn.disabled = false;
+            return pageDiv;
         }
 
         function updateNavigationState(currentPage, totalPages, view) {
-            if(!prevBtn || !nextBtn) return;
-            prevBtn.disabled = currentPage === 1;
-            nextBtn.disabled = currentPage === totalPages;
+            const isMobile = window.innerWidth < 768;
             
-            if (view.length === 1) { 
-                 pageIndicator.innerText = `Hal ${view[0]} / ${totalPages}`;
-            } else { 
-                if (view[0] === 0) pageIndicator.innerText = `Hal ${view[1]} / ${totalPages}`;
-                else if (view[1] === 0) pageIndicator.innerText = `Hal ${view[0]} / ${totalPages}`;
-                else pageIndicator.innerText = `Hal ${view[0]}-${view[1]} / ${totalPages}`;
+            if (isMobile) {
+                pageInfo.textContent = `${currentPage} / ${totalPages}`;
+                prevBtn.disabled = currentPage === 1;
+                nextBtn.disabled = currentPage === totalPages;
+            } else {
+                let leftPage = view[0];
+                let rightPage = view[1];
+                
+                if (leftPage === 0) { // Halaman Sampul Depan
+                    pageInfo.textContent = `${rightPage} / ${totalPages}`;
+                    prevBtn.disabled = true;
+                    nextBtn.disabled = rightPage >= totalPages;
+                } else if (rightPage === 0) { // Halaman Sampul Belakang
+                    pageInfo.textContent = `${leftPage} / ${totalPages}`;
+                    prevBtn.disabled = leftPage <= 1;
+                    nextBtn.disabled = true;
+                } else { // Halaman Terbuka Dua
+                    pageInfo.textContent = `${leftPage}-${rightPage} / ${totalPages}`;
+                    prevBtn.disabled = leftPage <= 1;
+                    nextBtn.disabled = rightPage >= totalPages;
+                }
             }
         }
 
-        // Jalankan Inisialisasi
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initApp);
-        } else {
-            initApp();
+        function handleResize() {
+            const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const isPortrait = window.innerHeight > window.innerWidth;
+            
+            if (isMobileDevice && isPortrait && isBookRendered) {
+                orientationOverlay.classList.remove('hidden');
+            } else {
+                orientationOverlay.classList.add('hidden');
+            }
+
+            if (isBookRendered && pdfDoc) {
+                pdfDoc.getPage(1).then(page1 => {
+                    const viewport1 = page1.getViewport({ scale: 1.0 });
+                    const pdfRatio = viewport1.width / viewport1.height;
+                    
+                    const containerWidth = viewerSection.clientWidth - 40;
+                    const containerHeight = viewerSection.clientHeight - 80;
+                    
+                    let isMobile = window.innerWidth < 768;
+                    let bookWidth, bookHeight;
+
+                    if (isMobile) {
+                        bookWidth = containerWidth;
+                        bookHeight = bookWidth / pdfRatio;
+                        if (bookHeight > containerHeight) {
+                            bookHeight = containerHeight;
+                            bookWidth = bookHeight * pdfRatio;
+                        }
+                    } else {
+                        let singlePageWidth = containerWidth / 2;
+                        bookHeight = singlePageWidth / pdfRatio;
+                        
+                        if (bookHeight > containerHeight) {
+                            bookHeight = containerHeight;
+                            singlePageWidth = bookHeight * pdfRatio;
+                        }
+                        bookWidth = singlePageWidth * 2;
+                    }
+
+                    $(flipbookEl).turn('display', isMobile ? 'single' : 'double');
+                    $(flipbookEl).turn('size', Math.round(bookWidth), Math.round(bookHeight));
+                });
+            }
         }
     </script>
 </body>
